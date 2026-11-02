@@ -68,8 +68,11 @@ export default function DonationRequestDetails() {
     });
   }, [error]);
 
-  const isRequester = request?.requesterId === user.id;
-  const isAcceptedDonor = request?.donorId === user.id;
+  const userId = String(user?.id ?? user?._id ?? "");
+  const userRole = String(user?.role ?? "").trim().toLowerCase();
+  const isRequester = Boolean(userId && request?.requesterId === userId);
+  const isAcceptedDonor = Boolean(userId && request?.donorId === userId);
+  const canConfirmDonation = request?.status === "pending" && userRole === "donor" && !isRequester;
 
   const onConfirmDonation = async () => {
     const confirmation = await Swal.fire({
@@ -180,7 +183,7 @@ export default function DonationRequestDetails() {
               )}
             </section>
 
-            {request.status === "pending" && user.role === "donor" && !isRequester && (
+            {canConfirmDonation && (
               <div className="mt-5 rounded-2xl border border-rose-100 bg-rose-50/70 p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Can you donate?</h2>
