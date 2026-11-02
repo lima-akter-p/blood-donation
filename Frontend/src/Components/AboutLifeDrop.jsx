@@ -23,7 +23,7 @@ const communityImages = [
 
 export default function AboutLifeDrop() {
   return (
-    <section className="relative isolate overflow-hidden bg-[#f8f8fa] px-5 py-16 sm:px-8 sm:py-20 lg:min-h-142.5 lg:px-12 lg:py-24">
+    <section id="about-life-drop" className="relative isolate scroll-mt-20 overflow-hidden bg-[#f8f8fa] px-5 py-16 sm:px-8 sm:py-20 lg:min-h-142.5 lg:px-12 lg:py-24">
 
       {/* Background Decorations */}
       <div className="pointer-events-none absolute -left-40 top-10 -z-10 h-96 w-96 rounded-full bg-rose-100/50 blur-3xl" />

@@ -1,25 +1,34 @@
 
 
-import { ChevronDown, Droplet, HandCoins, Heart, LayoutDashboard, LogOut, Menu,X } from "lucide-react";
+import { ChevronDown, Droplet, HandCoins, Heart, LayoutDashboard, LogOut, Mail, Menu, Search, X } from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router";
+import Swal from "sweetalert2";
 
 
-export default function Navbar({ user, logout }) {
+export default function Navbar({ user, loading, logout }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    try {
-      await logout();
-      setDropdownOpen(false);
-      setMobileOpen(false);
-      navigate("/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+    const confirmation = await Swal.fire({
+      title: "Log out of LifeDrop?",
+      text: "You can sign in again at any time.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Log out",
+      cancelButtonText: "Stay signed in",
+      confirmButtonColor: "#e11d48",
+    });
+    if (!confirmation.isConfirmed) return;
+
+    await logout();
+    setDropdownOpen(false);
+    setMobileOpen(false);
+    await Swal.fire({ title: "Signed out", icon: "success", timer: 1300, showConfirmButton: false });
+    navigate("/");
   };
 
   const navLinkClass = ({ isActive }) =>
@@ -53,9 +62,18 @@ export default function Navbar({ user, logout }) {
             <Droplet size={17} />
             Donation Requests
           </NavLink>
-         
+          <NavLink to="/search" className={navLinkClass}>
+            <Search size={17} />
+            Search Donors
+          </NavLink>
+          <NavLink to="/contact" className={navLinkClass}>
+            <Mail size={17} />
+            Contact
+          </NavLink>
 
-          {!user ? (
+          {loading ? (
+            <span className="ml-2 h-10 w-20 animate-pulse rounded-lg bg-gray-100" aria-label="Loading account" />
+          ) : !user ? (
             /* Before Login */
             <NavLink
               to="/login"
@@ -80,15 +98,15 @@ export default function Navbar({ user, logout }) {
                   aria-expanded={dropdownOpen}
                   aria-label="Open user menu"
                 >
-                  {user.photoURL ? (
+                  {user.avatar || user.photoURL ? (
                     <img
-                      src={user.photoURL}
+                      src={user.avatar || user.photoURL}
                       alt="User avatar"
                       className="h-9 w-9 rounded-full object-cover"
                     />
                   ) : (
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-100 font-bold text-red-600">
-                      {(user.displayName || user.name || user.email || "U")
+                      {(user.name || user.displayName || user.email || "U")
                         .charAt(0)
                         .toUpperCase()}
                     </span>
@@ -106,7 +124,7 @@ export default function Navbar({ user, logout }) {
                   <div className="absolute right-0 mt-3 w-56 overflow-hidden rounded-xl border border-gray-100 bg-white py-2 shadow-xl">
                     <div className="border-b border-gray-100 px-4 py-3">
                       <p className="truncate text-sm font-semibold text-gray-900">
-                        {user.displayName || user.name || "User"}
+                        {user.name || user.displayName || "User"}
                       </p>
                       <p className="truncate text-xs text-gray-500">
                         {user.email}
@@ -161,8 +179,26 @@ export default function Navbar({ user, logout }) {
               <Droplet size={18} />
               Donation Requests
             </NavLink>
+            <NavLink
+              to="/search"
+              className={navLinkClass}
+              onClick={() => setMobileOpen(false)}
+            >
+              <Search size={18} />
+              Search Donors
+            </NavLink>
+            <NavLink
+              to="/contact"
+              className={navLinkClass}
+              onClick={() => setMobileOpen(false)}
+            >
+              <Mail size={18} />
+              Contact
+            </NavLink>
 
-            {!user ? (
+            {loading ? (
+              <div className="h-10 animate-pulse rounded-lg bg-gray-100" aria-label="Loading account" />
+            ) : !user ? (
               <NavLink
                 to="/login"
                 onClick={() => setMobileOpen(false)}
@@ -182,15 +218,15 @@ export default function Navbar({ user, logout }) {
                 </NavLink>
 
                 <div className="my-2 flex items-center gap-3 border-y border-gray-100 py-3">
-                  {user.photoURL ? (
+                  {user.avatar || user.photoURL ? (
                     <img
-                      src={user.photoURL}
+                      src={user.avatar || user.photoURL}
                       alt="User avatar"
                       className="h-10 w-10 rounded-full object-cover"
                     />
                   ) : (
                     <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 font-bold text-red-600">
-                      {(user.displayName || user.name || user.email || "U")
+                      {(user.name || user.displayName || user.email || "U")
                         .charAt(0)
                         .toUpperCase()}
                     </span>
@@ -198,7 +234,7 @@ export default function Navbar({ user, logout }) {
 
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-gray-900">
-                      {user.displayName || user.name || "User"}
+                      {user.name || user.displayName || "User"}
                     </p>
                     <p className="truncate text-xs text-gray-500">
                       {user.email}
