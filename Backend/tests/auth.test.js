@@ -1497,6 +1497,59 @@ describe('donation request API', () => {
       DonationRequest.findById = originalRequestFindById;
     }
   });
+
+  it('allows admins to set any valid request status', async () => {
+    const originalFindById = User.findById;
+    const originalRequestFindById = DonationRequest.findById;
+    const admin = new User({
+      _id: new mongoose.Types.ObjectId(),
+      name: 'Site Admin',
+      email: 'admin@example.com',
+      password: 'not-returned',
+      bloodGroup: 'A+',
+      district: 'Dhaka',
+      upazila: 'Savar',
+      role: 'admin',
+      status: 'active',
+    });
+    const request = {
+      _id: new mongoose.Types.ObjectId(),
+      requesterId: new mongoose.Types.ObjectId(),
+      requesterName: 'Requesting Donor',
+      requesterEmail: 'requester@example.com',
+      ...requestDetails,
+      donorId: new mongoose.Types.ObjectId(),
+      donorName: 'Confirmed Donor',
+      donorEmail: 'donor@example.com',
+      status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      async save() { return this; },
+    };
+    User.findById = () => ({ select: async () => admin });
+    DonationRequest.findById = async () => request;
+
+    try {
+      const token = createAuthToken(admin._id);
+      for (const status of ['inprogress', 'done', 'canceled', 'pending']) {
+        const response = await patchJson(
+          `/donation-requests/${request._id}/status`,
+          { status },
+          token,
+        );
+        assert.equal(response.status, 200);
+        assert.equal(request.status, status);
+        if (status === 'pending') {
+          assert.equal(request.donorId, null);
+          assert.equal(request.donorName, '');
+          assert.equal(request.donorEmail, '');
+        }
+      }
+    } finally {
+      User.findById = originalFindById;
+      DonationRequest.findById = originalRequestFindById;
+    }
+  });
 });
 
 describe('authentication API validation', () => {

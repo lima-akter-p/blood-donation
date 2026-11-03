@@ -406,7 +406,7 @@ export async function updateDonationRequestStatus(req, res) {
     res.status(404).json({ message: 'Donation request not found.' });
     return;
   }
-  if (role !== 'volunteer' && (
+  if (role !== 'admin' && role !== 'volunteer' && (
     (status !== 'done' && status !== 'canceled')
     || request.status !== 'inprogress'
   )) {

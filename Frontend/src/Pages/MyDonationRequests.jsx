@@ -41,9 +41,30 @@ function RequestRow({ request, onDelete, onUpdateStatus, busy, isAdmin }) {
         {formatDate(request.donationDate)} · {request.donationTime}
       </td>
       <td className="px-4 py-4">
-        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold capitalize ${statusStyles[request.status]}`}>
-          {request.status === "inprogress" ? "In progress" : request.status}
-        </span>
+        {isAdmin ? (
+          <>
+            <label className="sr-only" htmlFor={`request-status-${request.id}`}>
+              Update status for {request.recipientName}
+            </label>
+            <select
+              id={`request-status-${request.id}`}
+              value={request.status}
+              onChange={(event) => onUpdateStatus(request, event.target.value)}
+              disabled={busy}
+              className={`rounded-lg border-0 px-3 py-2 text-xs font-bold capitalize outline-none focus:ring-2 focus:ring-rose-300 disabled:opacity-50 ${statusStyles[request.status]}`}
+            >
+              {statuses.map((value) => (
+                <option key={value} value={value}>
+                  {value === "inprogress" ? "In progress" : value}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold capitalize ${statusStyles[request.status]}`}>
+            {request.status === "inprogress" ? "In progress" : request.status}
+          </span>
+        )}
         {request.status === "inprogress" && request.donorName && (
           <p className="mt-2 text-xs leading-5 text-slate-600">
             Donor: {request.donorName}<br />{request.donorEmail}
@@ -203,15 +224,16 @@ export default function MyDonationRequests() {
   };
 
   const handleStatusUpdate = async (request, nextStatus) => {
-    const isDone = nextStatus === "done";
+    if (nextStatus === request.status) return;
+    const statusLabel = nextStatus === "inprogress" ? "in progress" : nextStatus;
     const confirmation = await Swal.fire({
-      title: isDone ? "Mark this donation as done?" : "Cancel this donation?",
-      text: `This changes the request for ${request.recipientName} to ${isDone ? "done" : "canceled"}.`,
+      title: user.role === "admin" ? "Update donation request status?" : nextStatus === "done" ? "Mark this donation as done?" : "Cancel this donation?",
+      text: `This changes the request for ${request.recipientName} to ${statusLabel}.`,
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: isDone ? "Mark as done" : "Cancel donation",
-      cancelButtonText: "Keep in progress",
-      confirmButtonColor: isDone ? "#059669" : "#e11d48",
+      confirmButtonText: user.role === "admin" ? "Update status" : nextStatus === "done" ? "Mark as done" : "Cancel donation",
+      cancelButtonText: "Keep current status",
+      confirmButtonColor: nextStatus === "done" ? "#059669" : "#e11d48",
     });
     if (!confirmation.isConfirmed) return;
 
@@ -220,7 +242,7 @@ export default function MyDonationRequests() {
       const result = await updateDonationRequestStatus(request.id, nextStatus);
       setReloadKey((current) => current + 1);
       await Swal.fire({
-        title: isDone ? "Donation marked done" : "Donation canceled",
+        title: `Request marked ${statusLabel}`,
         text: result.notification?.message || "",
         icon: result.notification?.sent === false ? "warning" : "success",
         confirmButtonColor: "#e11d48",
