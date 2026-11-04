@@ -1881,17 +1881,19 @@ describe('authentication API validation', () => {
 
   it('validates uploaded image content and securely forwards PNG images to ImageBB', async () => {
     const originalFetch = globalThis.fetch;
+    const originalConsoleWarn = console.warn;
     const originalApiKey = process.env.IMGBB_API_KEY;
     const forwardedRequest = {};
+    let uploadResult = Response.json({
+      success: true,
+      data: { url: 'https://i.ibb.co/example/avatar.png' },
+    });
     const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]);
     process.env.IMGBB_API_KEY = 'test-key-not-for-production';
     globalThis.fetch = async (url, options) => {
       forwardedRequest.url = url;
       forwardedRequest.options = options;
-      return Response.json({
-        success: true,
-        data: { url: 'https://i.ibb.co/example/avatar.png' },
-      });
+      return uploadResult;
     };
 
     const responseBody = {};
@@ -1927,6 +1929,32 @@ describe('authentication API validation', () => {
       assert.equal(forwardedRequest.options.method, 'POST');
       assert.equal(forwardedRequest.options.body instanceof FormData, true);
 
+      uploadResult = Response.json({
+        success: false,
+        error: {
+          code: 400,
+          message: 'Rejected key test-key-not-for-production',
+        },
+      }, { status: 400 });
+      let diagnostic;
+      console.warn = (...args) => { diagnostic = args; };
+      responseBody.status = undefined;
+      responseBody.body = undefined;
+      await uploadAvatar({ file: { buffer: png } }, response, (error) => {
+        throw error;
+      });
+      console.warn = originalConsoleWarn;
+      assert.equal(responseBody.status, 502);
+      assert.deepEqual(diagnostic, [
+        'ImgBB avatar upload rejected',
+        {
+          status: 400,
+          errorCode: 400,
+          message: 'Rejected key [redacted]',
+        },
+      ]);
+      assert.equal(JSON.stringify(diagnostic).includes('test-key-not-for-production'), false);
+
       responseBody.status = undefined;
       responseBody.body = undefined;
       await uploadAvatar({ file: { buffer: Buffer.from('not an image') } }, response, (error) => {
@@ -1935,6 +1963,7 @@ describe('authentication API validation', () => {
       assert.equal(responseBody.status, 400);
     } finally {
       globalThis.fetch = originalFetch;
+      console.warn = originalConsoleWarn;
       if (originalApiKey === undefined) delete process.env.IMGBB_API_KEY;
       else process.env.IMGBB_API_KEY = originalApiKey;
     }

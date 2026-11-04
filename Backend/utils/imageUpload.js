@@ -67,6 +67,17 @@ export async function uploadImageToImgBB(buffer, mimeType) {
   }
 
   if (!response.ok || result.success !== true || typeof result.data?.url !== 'string') {
+    const providerMessage = typeof result.error?.message === 'string'
+      ? result.error.message
+        .replaceAll(apiKey, '[redacted]')
+        .replaceAll(encodeURIComponent(apiKey), '[redacted]')
+        .slice(0, 200)
+      : undefined;
+    console.warn('ImgBB avatar upload rejected', {
+      status: response.status,
+      errorCode: result.error?.code,
+      message: providerMessage,
+    });
     const error = new Error('The image could not be uploaded. Please try again.');
     error.status = 502;
     throw error;
