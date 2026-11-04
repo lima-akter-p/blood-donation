@@ -30,6 +30,22 @@ const router = createBrowserRouter([
         },
       },
       {
+        path: "blog",
+        hydrateFallbackElement: routeFallback,
+        lazy: async () => {
+          const { default: BlogPosts } = await import("../Pages/BlogPosts");
+          return { Component: BlogPosts };
+        },
+      },
+      {
+        path: "blog/:slug",
+        hydrateFallbackElement: routeFallback,
+        lazy: async () => {
+          const { default: BlogArticle } = await import("../Pages/BlogArticle");
+          return { Component: BlogArticle };
+        },
+      },
+      {
         path: "donation-requests",
         hydrateFallbackElement: routeFallback,
         lazy: async () => {

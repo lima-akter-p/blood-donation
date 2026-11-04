@@ -1,7 +1,4 @@
-const API_BASE_URL = (
-  import.meta.env.VITE_API_URL
-  || (import.meta.env.DEV ? "/api" : "http://localhost:3000")
-).replace(/\/$/, "");
+import { API_BASE_URL } from "./apiBaseUrl";
 
 async function request(path, { token, ...options } = {}) {
   const headers = { Accept: "application/json", ...options.headers };

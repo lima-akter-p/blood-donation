@@ -8,80 +8,18 @@ import {
   CalendarDays,
   HeartPulse,
 } from "lucide-react";
-
-const posts = [
-  {
-    id: 1,
-    category: "Blood Donation",
-    title: "Blood Donation: Everything You Need to Know",
-    description:
-      "Learn how blood donation works, who may be eligible, and how your contribution can help patients in need.",
-    image:
-      "https://images.unsplash.com/photo-1615461066841-6116e61058f4?auto=format&fit=crop&w=800&q=85",
-    date: "October 10, 2026",
-    readTime: "5 min read",
-    slug: "/blog/blood-donation-guide",
-  },
-  {
-    id: 2,
-    category: "Donor Guide",
-    title: "How to Prepare for Your First Blood Donation",
-    description:
-      "Discover practical preparation tips to help you feel ready before visiting a blood donation center.",
-    image:
-      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=800&q=85",
-    date: "October 12, 2026",
-    readTime: "4 min read",
-    slug: "/blog/first-donation",
-  },
-  {
-    id: 3,
-    category: "Awareness",
-    title: "Why Every Blood Donation Matters",
-    description:
-      "Find out how voluntary blood donation helps hospitals care for patients during emergencies and treatment.",
-    image:
-      "https://images.unsplash.com/photo-1615461066841-6116e61058f4?auto=format&fit=crop&w=800&q=85",
-    date: "October 15, 2026",
-    readTime: "6 min read",
-    slug: "/blog/why-donation-matters",
-  },
-  {
-    id: 4,
-    category: "Health & Safety",
-    title: "Important Things to Know Before Donating Blood",
-    description:
-      "Explore essential safety considerations and learn why professional donor screening matters.",
-    image:
-      "https://images.unsplash.com/photo-1584982751601-97dcc096659c?auto=format&fit=crop&w=800&q=85",
-    date: "October 18, 2026",
-    readTime: "5 min read",
-    slug: "/blog/donation-safety",
-  },
-  {
-    id: 5,
-    category: "Community",
-    title: "How to Become a Regular Blood Donor",
-    description:
-      "Learn how to stay connected with donation centers and support your community through voluntary donation.",
-    image:
-      "https://images.unsplash.com/photo-1531206715517-5c0ba140b2b8?auto=format&fit=crop&w=800&q=85",
-    date: "October 20, 2026",
-    readTime: "4 min read",
-    slug: "/blog/regular-donor",
-  },
-];
+import { blogPosts } from "../data/blogPosts";
 
 export default function BlogPosts() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const nextSlide = () => {
-    setCurrentIndex((prev) => (prev + 1) % posts.length);
+    setCurrentIndex((prev) => (prev + 1) % blogPosts.length);
   };
 
   const prevSlide = () => {
     setCurrentIndex(
-      (prev) => (prev - 1 + posts.length) % posts.length
+      (prev) => (prev - 1 + blogPosts.length) % blogPosts.length
     );
   };
 
@@ -89,7 +27,7 @@ export default function BlogPosts() {
   // Each slide shows the next three posts on desktop,
   // two on tablet, and one on mobile.
   const visiblePosts = [0, 1, 2].map(
-    (offset) => posts[(currentIndex + offset) % posts.length]
+    (offset) => blogPosts[(currentIndex + offset) % blogPosts.length]
   );
 
   return (
@@ -146,7 +84,7 @@ export default function BlogPosts() {
             >
               {/* Image */}
               <Link
-                to={post.slug}
+                to={`/blog/${post.slug}`}
                 aria-label={`Read ${post.title}`}
                 className="relative block h-56 overflow-hidden bg-rose-50"
               >
@@ -177,7 +115,7 @@ export default function BlogPosts() {
                 </div>
 
                 <h3 className="text-xl font-bold leading-snug text-slate-900 transition-colors group-hover:text-rose-600">
-                  <Link to={post.slug}>
+                  <Link to={`/blog/${post.slug}`}>
                     {post.title}
                   </Link>
                 </h3>
@@ -187,7 +125,7 @@ export default function BlogPosts() {
                 </p>
 
                 <Link
-                  to={post.slug}
+                  to={`/blog/${post.slug}`}
                   className="mt-6 inline-flex w-fit items-center gap-2 border-b border-transparent pb-1 text-sm font-bold text-rose-600 transition-all duration-300 hover:gap-3 hover:border-rose-600"
                 >
                   Read Article
@@ -200,7 +138,7 @@ export default function BlogPosts() {
 
         {/* Carousel indicators */}
         <div className="mt-9 flex items-center justify-center gap-2">
-          {posts.map((post, index) => (
+          {blogPosts.map((post, index) => (
             <button
               key={post.id}
               type="button"
