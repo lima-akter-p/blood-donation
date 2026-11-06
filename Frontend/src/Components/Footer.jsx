@@ -58,7 +58,7 @@ export default function Footer() {
       </div>
 
       <div className="border-t border-white/10 px-4 py-5 text-center text-sm text-gray-500">
-        © {new Date().getFullYear()} LifeDrop. All rights reserved.
+        © {new Date().getFullYear()} LifeDrop, Lima Akter, Shahnaj Akter, All rights reserved.
       </div>
     </footer>
   );

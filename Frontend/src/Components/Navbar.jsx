@@ -86,7 +86,7 @@ export default function Navbar({ user, loading, logout }) {
             <>
               <NavLink to="/funding" className={navLinkClass}>
                 <HandCoins size={17} />
-                Funding
+                Donation
               </NavLink>
 
               {/* User Dropdown */}

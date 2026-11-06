@@ -77,7 +77,7 @@ function SidebarContent({ user, onNavigate, onLogout }) {
       path: "/dashboard/manage-donation-requests",
       icon: ClipboardList,
     }] : []),
-    { label: "Funding", path: "/funding", icon: HandCoins },
+    { label: "Donation", path: "/funding", icon: HandCoins },
   ];
 
   return (
