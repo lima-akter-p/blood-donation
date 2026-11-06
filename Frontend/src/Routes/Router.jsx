@@ -223,6 +223,24 @@ const router = createBrowserRouter([
             ],
           },
           {
+            path: "donor-verifications",
+            element: (
+              <RequireAdmin>
+                <Outlet />
+              </RequireAdmin>
+            ),
+            children: [
+              {
+                index: true,
+                hydrateFallbackElement: routeFallback,
+                lazy: async () => {
+                  const { default: AdminDonorVerifications } = await import("../Pages/AdminDonorVerifications");
+                  return { Component: AdminDonorVerifications };
+                },
+              },
+            ],
+          },
+          {
             path: "contact-messages",
             element: (
               <RequireAdmin>

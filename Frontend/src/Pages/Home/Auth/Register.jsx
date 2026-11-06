@@ -45,7 +45,8 @@ const Register = () => {
 
     const onSubmit = async (details) => {
         try {
-            const { avatarFile, ...account } = details;
+            const { avatarFile, birthCertificate, ...account } = details;
+            account.birthCertificate = birthCertificate[0];
             let avatarUploadSkipped = false;
             if (avatarFile?.[0]) {
                 Swal.fire({
@@ -72,12 +73,10 @@ const Register = () => {
                     avatarUploadSkipped = true;
                 }
             }
-            const user = await createAccount(account);
+            await createAccount(account);
             await Swal.fire({
-                title: `Welcome to LifeDrop, ${user.name}!`,
-                text: avatarUploadSkipped
-                    ? "Your account is ready. You can add a profile photo later from your profile."
-                    : "Your donor account is ready.",
+                title: "Registration submitted",
+                text: `${avatarUploadSkipped ? "Your account was created without a profile photo. " : ""}Your birth certificate will be reviewed privately by an administrator. Donor features will be available after approval.`,
                 icon: "success",
                 confirmButtonColor: "#e11d48",
             });
@@ -218,6 +217,75 @@ const Register = () => {
                         {upazilas.map((upazila) => <option key={upazila} value={upazila}>{upazila}</option>)}
                     </select>
                     {errors.upazila && <p className="mt-2 text-sm text-red-600" role="alert">{errors.upazila.message}</p>}
+                </div>
+
+                <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="register-date-of-birth">
+                        Date of birth <span className="font-normal text-slate-400">(18+ only)</span>
+                    </label>
+                    <input
+                        id="register-date-of-birth"
+                        type="date"
+                        max={(() => {
+                            const date = new Date();
+                            date.setFullYear(date.getFullYear() - 18);
+                            const month = String(date.getMonth() + 1).padStart(2, "0");
+                            const day = String(date.getDate()).padStart(2, "0");
+                            return `${date.getFullYear()}-${month}-${day}`;
+                        })()}
+                        className={inputClass}
+                        aria-invalid={Boolean(errors.dateOfBirth)}
+                        {...register("dateOfBirth", {
+                            required: "Date of birth is required.",
+                            validate: (value) => {
+                                const birthday = new Date(`${value}T00:00:00`);
+                                const cutoff = new Date();
+                                cutoff.setHours(0, 0, 0, 0);
+                                cutoff.setFullYear(cutoff.getFullYear() - 18);
+                                return (!Number.isNaN(birthday.getTime()) && birthday <= cutoff)
+                                    || "You must be at least 18 years old to register as a donor.";
+                            },
+                        })}
+                    />
+                    {errors.dateOfBirth && <p className="mt-2 text-sm text-red-600" role="alert">{errors.dateOfBirth.message}</p>}
+                </div>
+
+                <div className="sm:col-span-2">
+                    <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="register-birth-certificate">
+                        Birth certificate photo <span className="font-normal text-rose-600">(required, PNG/JPEG/WebP up to 5 MB)</span>
+                    </label>
+                    <input
+                        id="register-birth-certificate"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="w-full rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-rose-50 file:px-4 file:py-2.5 file:font-semibold file:text-rose-700 hover:file:bg-rose-100"
+                        aria-invalid={Boolean(errors.birthCertificate)}
+                        {...register("birthCertificate", {
+                            required: "A birth certificate photo is required.",
+                            validate: (files) => {
+                                const file = files?.[0];
+                                if (!file) return "A birth certificate photo is required.";
+                                if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+                                    return "Choose a PNG, JPEG, or WebP image.";
+                                }
+                                return file.size <= 5 * 1024 * 1024 || "Image must be no larger than 5 MB.";
+                            },
+                        })}
+                    />
+                    {errors.birthCertificate && <p className="mt-2 text-sm text-red-600" role="alert">{errors.birthCertificate.message}</p>}
+                    <p className="mt-2 text-xs leading-5 text-slate-600">
+                        This document is stored privately, visible only to administrators for manual review, and removed from your active account record after the decision. Database backups may retain deleted data until their configured retention period expires; the document is never uploaded to a public image host.
+                    </p>
+                    <label className="mt-4 flex items-start gap-3 text-sm leading-6 text-slate-700">
+                        <input
+                            type="checkbox"
+                            className="mt-1 h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                            aria-invalid={Boolean(errors.documentConsent)}
+                            {...register("documentConsent", { required: "Consent is required to submit your certificate for review." })}
+                        />
+                        <span>I consent to private storage of my birth certificate for administrator review and understand it is removed from my active account record after the decision. Database backup retention may apply.</span>
+                    </label>
+                    {errors.documentConsent && <p className="mt-2 text-sm text-red-600" role="alert">{errors.documentConsent.message}</p>}
                 </div>
 
                 <div>

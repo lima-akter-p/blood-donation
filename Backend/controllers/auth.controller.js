@@ -26,6 +26,7 @@ function publicUser(user) {
     nextAvailableDate: user.nextAvailableDate || '',
     role: user.role,
     status: user.status,
+    donorVerificationStatus: user.donorVerificationStatus || 'verified',
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -83,6 +84,31 @@ function isHttpUrl(value) {
   }
 }
 
+function validateDateOfBirth(value) {
+  if (
+    typeof value !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}$/.test(value)
+    || Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))
+    || new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value
+  ) {
+    return false;
+  }
+
+  const birthDate = new Date(`${value}T00:00:00.000Z`);
+  const today = new Date();
+  const adultDate = new Date(Date.UTC(
+    birthDate.getUTCFullYear() + 18,
+    birthDate.getUTCMonth(),
+    birthDate.getUTCDate(),
+  ));
+  return adultDate <= today;
+}
+
+function getVerifiedDocument(req) {
+  const mimeType = detectImageMimeType(req.file?.buffer);
+  return mimeType ? { buffer: req.file.buffer, mimeType } : null;
+}
+
 export async function uploadAvatar(req, res, next) {
   const { buffer } = req.file ?? {};
   const mimeType = detectImageMimeType(buffer);
@@ -109,6 +135,19 @@ export async function registerUser(req, res) {
     res.status(400).json({ message: validation.error });
     return;
   }
+  const certificate = getVerifiedDocument(req);
+  if (!certificate) {
+    res.status(400).json({ message: 'Upload a valid birth certificate image (PNG, JPEG, or WebP, up to 5 MB).' });
+    return;
+  }
+  if (!validateDateOfBirth(req.body.dateOfBirth)) {
+    res.status(400).json({ message: 'Donor registration is limited to people aged 18 or older. Enter a valid date of birth.' });
+    return;
+  }
+  if (req.body.documentConsent !== 'true') {
+    res.status(400).json({ message: 'Consent is required to store your birth certificate privately for administrator review.' });
+    return;
+  }
 
   const { password, ...profile } = validation.value;
 
@@ -122,6 +161,10 @@ export async function registerUser(req, res) {
     const user = await User.create({
       ...profile,
       password: await bcrypt.hash(password, BCRYPT_ROUNDS),
+      dateOfBirth: req.body.dateOfBirth,
+      donorVerificationStatus: 'pending',
+      birthCertificate: certificate.buffer,
+      birthCertificateMimeType: certificate.mimeType,
     });
 
     res.status(201).json({
@@ -204,7 +247,14 @@ export async function loginWithGoogle(req, res, next) {
   let user = await User.findOne({ email });
   const googlePicture = getGoogleProfilePictureUrl(identity.picture);
   if (!user) {
-    const profile = req.body.profile;
+    let profile = req.body.profile;
+    if (typeof profile === 'string') {
+      try {
+        profile = JSON.parse(profile);
+      } catch {
+        profile = null;
+      }
+    }
     if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
       res.json({
         requiresProfile: true,
@@ -214,6 +264,19 @@ export async function loginWithGoogle(req, res, next) {
           avatar: googlePicture,
         },
       });
+      return;
+    }
+    const certificate = getVerifiedDocument(req);
+    if (!certificate) {
+      res.status(400).json({ message: 'Upload a valid birth certificate image (PNG, JPEG, or WebP, up to 5 MB).' });
+      return;
+    }
+    if (!validateDateOfBirth(profile.dateOfBirth)) {
+      res.status(400).json({ message: 'Donor registration is limited to people aged 18 or older. Enter a valid date of birth.' });
+      return;
+    }
+    if (profile.documentConsent !== true && profile.documentConsent !== 'true') {
+      res.status(400).json({ message: 'Consent is required to store your birth certificate privately for administrator review.' });
       return;
     }
 
@@ -242,6 +305,10 @@ export async function loginWithGoogle(req, res, next) {
         district,
         upazila,
         authProviders: ['google'],
+        dateOfBirth: profile.dateOfBirth,
+        donorVerificationStatus: 'pending',
+        birthCertificate: certificate.buffer,
+        birthCertificateMimeType: certificate.mimeType,
       });
     } catch (error) {
       if (error.code !== 11000) throw error;
@@ -385,6 +452,34 @@ export async function updateCurrentUser(req, res) {
   }
 
   req.user.set(updates);
+  await req.user.save();
+  res.json({ user: publicUser(req.user) });
+}
+
+export async function resubmitDonorVerification(req, res) {
+  if (req.user.role !== 'donor') {
+    res.status(403).json({ message: 'Only donor accounts can submit donor verification.' });
+    return;
+  }
+  if (req.user.donorVerificationStatus !== 'rejected') {
+    res.status(409).json({ message: 'A new certificate can only be submitted after an administrator requests resubmission.' });
+    return;
+  }
+
+  const certificate = getVerifiedDocument(req);
+  if (!certificate || !validateDateOfBirth(req.body?.dateOfBirth)) {
+    res.status(400).json({ message: 'Upload a valid birth certificate image and an eligible date of birth.' });
+    return;
+  }
+  if (req.body.documentConsent !== 'true') {
+    res.status(400).json({ message: 'Consent is required to store your birth certificate privately for administrator review.' });
+    return;
+  }
+
+  req.user.dateOfBirth = req.body.dateOfBirth;
+  req.user.birthCertificate = certificate.buffer;
+  req.user.birthCertificateMimeType = certificate.mimeType;
+  req.user.donorVerificationStatus = 'pending';
   await req.user.save();
   res.json({ user: publicUser(req.user) });
 }

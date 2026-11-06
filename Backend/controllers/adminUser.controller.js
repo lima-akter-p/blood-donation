@@ -104,6 +104,14 @@ export async function updateUserRole(req, res) {
     res.status(404).json({ message: 'User not found.' });
     return;
   }
+  if (
+    user.role === 'donor'
+    && user.donorVerificationStatus
+    && user.donorVerificationStatus !== 'verified'
+  ) {
+    res.status(409).json({ message: 'A donor must be verified before being promoted.' });
+    return;
+  }
   const canPromoteToVolunteer = user.role === 'donor' && role === 'volunteer';
   const canPromoteToAdmin = (user.role === 'donor' || user.role === 'volunteer') && role === 'admin';
   if (!canPromoteToVolunteer && !canPromoteToAdmin) {
@@ -114,4 +122,111 @@ export async function updateUserRole(req, res) {
   user.role = role;
   await user.save();
   res.json({ user: serializeUser(user) });
+}
+
+export async function getDonorVerificationQueue(req, res) {
+  const users = await User.find({
+    role: 'donor',
+    donorVerificationStatus: 'pending',
+  })
+    .select('name email avatar bloodGroup district upazila createdAt')
+    .sort({ createdAt: 1 })
+    .limit(100);
+  res.json({
+    applications: users.map((user) => ({
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      avatar: user.avatar || '',
+      bloodGroup: user.bloodGroup,
+      district: user.district,
+      upazila: user.upazila,
+      submittedAt: user.createdAt,
+    })),
+  });
+}
+
+export async function getDonorVerificationDocument(req, res) {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    res.status(404).json({ message: 'Verification application not found.' });
+    return;
+  }
+  const user = await User.findOne({
+    _id: req.params.id,
+    role: 'donor',
+    donorVerificationStatus: 'pending',
+  }).select('+birthCertificate +birthCertificateMimeType');
+  if (!user?.birthCertificate || !user.birthCertificateMimeType) {
+    res.status(404).json({ message: 'The private verification document is unavailable.' });
+    return;
+  }
+
+  res.set({
+    'Cache-Control': 'private, no-store, max-age=0',
+    'Content-Type': user.birthCertificateMimeType,
+    'Content-Disposition': 'inline',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "default-src 'none'; sandbox",
+  });
+  res.send(user.birthCertificate);
+}
+
+export async function reviewDonorVerification(req, res) {
+  const { status } = req.body ?? {};
+  if (status !== 'verified' && status !== 'rejected') {
+    res.status(400).json({ message: 'Review status must be verified or rejected.' });
+    return;
+  }
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    res.status(404).json({ message: 'Verification application not found.' });
+    return;
+  }
+
+  const user = await User.findOne({
+    _id: req.params.id,
+    role: 'donor',
+    donorVerificationStatus: 'pending',
+  }).select('+birthCertificate +birthCertificateMimeType +dateOfBirth');
+  if (!user) {
+    res.status(404).json({ message: 'Pending verification application not found.' });
+    return;
+  }
+  if (status === 'verified') {
+    if (!user.birthCertificate || !user.birthCertificateMimeType) {
+      res.status(409).json({ message: 'The verification document is unavailable; the application cannot be approved.' });
+      return;
+    }
+    const birthDate = new Date(`${user.dateOfBirth}T00:00:00.000Z`);
+    const adultDate = new Date(Date.UTC(
+      birthDate.getUTCFullYear() + 18,
+      birthDate.getUTCMonth(),
+      birthDate.getUTCDate(),
+    ));
+    if (!user.dateOfBirth || Number.isNaN(adultDate.getTime()) || adultDate > new Date()) {
+      res.status(409).json({ message: 'The applicant does not meet the minimum age requirement.' });
+      return;
+    }
+  }
+
+  const reviewedUser = await User.findOneAndUpdate(
+    {
+      _id: user._id,
+      role: 'donor',
+      donorVerificationStatus: 'pending',
+    },
+    {
+      $set: { donorVerificationStatus: status },
+      $unset: {
+        birthCertificate: 1,
+        birthCertificateMimeType: 1,
+        dateOfBirth: 1,
+      },
+    },
+    { new: true, runValidators: true },
+  );
+  if (!reviewedUser) {
+    res.status(409).json({ message: 'This verification application has already been reviewed.' });
+    return;
+  }
+  res.json({ user: serializeUser(reviewedUser), donorVerificationStatus: status });
 }

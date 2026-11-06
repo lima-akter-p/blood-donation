@@ -98,13 +98,14 @@ const Login = () => {
 
     const completeGoogleProfile = async (profile) => {
         try {
-            const result = await loginWithGoogle(googleIdToken, profile);
+            const { birthCertificate, ...details } = profile;
+            const result = await loginWithGoogle(googleIdToken, details, birthCertificate?.[0]);
             if (result.requiresProfile) {
                 throw new Error("Complete all profile fields before continuing.");
             }
             await Swal.fire({
-                title: `Welcome to LifeDrop, ${result.user.name}!`,
-                text: "Your donor account is ready.",
+                title: "Registration submitted",
+                text: "Your birth certificate will be reviewed privately by an administrator. Donor features will be available after approval.",
                 icon: "success",
                 confirmButtonColor: "#e11d48",
             });
@@ -260,6 +261,75 @@ const Login = () => {
                             {upazilas.map((upazila) => <option key={upazila} value={upazila}>{upazila}</option>)}
                         </select>
                         {googleErrors.upazila && <p className="mt-2 text-sm text-red-600" role="alert">{googleErrors.upazila.message}</p>}
+                    </div>
+                    <div>
+                        <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="google-date-of-birth">
+                            Date of birth <span className="font-normal text-slate-400">(18+ only)</span>
+                        </label>
+                        <input
+                            id="google-date-of-birth"
+                            type="date"
+                            max={(() => {
+                                const date = new Date();
+                                date.setFullYear(date.getFullYear() - 18);
+                                const month = String(date.getMonth() + 1).padStart(2, "0");
+                                const day = String(date.getDate()).padStart(2, "0");
+                                return `${date.getFullYear()}-${month}-${day}`;
+                            })()}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none focus:border-rose-500 focus:ring-4 focus:ring-rose-100"
+                            aria-invalid={Boolean(googleErrors.dateOfBirth)}
+                            {...registerGoogleProfile("dateOfBirth", {
+                                required: "Date of birth is required.",
+                                validate: (value) => {
+                                    const birthday = new Date(`${value}T00:00:00`);
+                                    const cutoff = new Date();
+                                    cutoff.setHours(0, 0, 0, 0);
+                                    cutoff.setFullYear(cutoff.getFullYear() - 18);
+                                    return (!Number.isNaN(birthday.getTime()) && birthday <= cutoff)
+                                        || "You must be at least 18 years old to register as a donor.";
+                                },
+                            })}
+                        />
+                        {googleErrors.dateOfBirth && <p className="mt-2 text-sm text-red-600" role="alert">{googleErrors.dateOfBirth.message}</p>}
+                    </div>
+                    <div>
+                        <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="google-birth-certificate">
+                            Birth certificate photo <span className="font-normal text-rose-600">(required, up to 5 MB)</span>
+                        </label>
+                        <input
+                            id="google-birth-certificate"
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="w-full rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-rose-50 file:px-3 file:py-2 file:font-semibold file:text-rose-700"
+                            aria-invalid={Boolean(googleErrors.birthCertificate)}
+                            {...registerGoogleProfile("birthCertificate", {
+                                required: "A birth certificate photo is required.",
+                                validate: (files) => {
+                                    const file = files?.[0];
+                                    if (!file) return "A birth certificate photo is required.";
+                                    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+                                        return "Choose a PNG, JPEG, or WebP image.";
+                                    }
+                                    return file.size <= 5 * 1024 * 1024 || "Image must be no larger than 5 MB.";
+                                },
+                            })}
+                        />
+                        {googleErrors.birthCertificate && <p className="mt-2 text-sm text-red-600" role="alert">{googleErrors.birthCertificate.message}</p>}
+                        <p className="mt-2 text-xs leading-5 text-slate-600">
+                            The document is stored privately for administrator review and removed from your active account record after the decision. Database backups may retain deleted data until their configured retention period expires. It is not uploaded to a public image host.
+                        </p>
+                    </div>
+                    <div>
+                        <label className="flex items-start gap-3 text-sm leading-6 text-slate-700">
+                            <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                aria-invalid={Boolean(googleErrors.documentConsent)}
+                                {...registerGoogleProfile("documentConsent", { required: "Consent is required to submit your certificate for review." })}
+                            />
+                            <span>I consent to private storage of my birth certificate for administrator review and understand it is removed from my active account record after the decision. Database backup retention may apply.</span>
+                        </label>
+                        {googleErrors.documentConsent && <p className="mt-2 text-sm text-red-600" role="alert">{googleErrors.documentConsent.message}</p>}
                     </div>
                     <button
                         type="submit"

@@ -29,13 +29,16 @@ function FieldError({ error }) {
 }
 
 export default function DashboardProfile() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, resubmitDonorVerification } = useAuth();
   const [editing, setEditing] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(user.avatar || "");
+  const [submittingVerification, setSubmittingVerification] = useState(false);
   const {
     control,
     register,
     setValue,
+    getValues,
+    trigger,
     reset,
     handleSubmit,
     formState: { errors, isSubmitting },
@@ -43,6 +46,7 @@ export default function DashboardProfile() {
 
   const selectedDistrict = useWatch({ control, name: "district" });
   const isDonor = user.role?.trim().toLowerCase() === "donor";
+  const donorVerificationStatus = user.donorVerificationStatus || "verified";
   const selectedDistrictId = districts.find(
     (district) => district.name === selectedDistrict,
   )?.id;
@@ -75,13 +79,16 @@ export default function DashboardProfile() {
 
   const onSubmit = async (values) => {
     try {
-      const {
-        avatarFile: selectedAvatar,
-        phone,
-        isAvailable,
-        nextAvailableDate,
-        ...profile
-      } = values;
+      const selectedAvatar = values.avatarFile;
+      const profile = { ...values };
+      delete profile.avatarFile;
+      delete profile.verificationDateOfBirth;
+      delete profile.verificationCertificate;
+      delete profile.verificationConsent;
+      const { phone, isAvailable, nextAvailableDate } = profile;
+      delete profile.phone;
+      delete profile.isAvailable;
+      delete profile.nextAvailableDate;
       if (isDonor) {
         profile.phone = phone;
         profile.isAvailable = isAvailable;
@@ -122,6 +129,50 @@ export default function DashboardProfile() {
     }
   };
 
+  const submitVerification = async () => {
+    if (submittingVerification) return;
+    const valid = await trigger([
+      "verificationDateOfBirth",
+      "verificationCertificate",
+      "verificationConsent",
+    ]);
+    if (!valid) return;
+
+    const values = getValues();
+    setSubmittingVerification(true);
+    try {
+      Swal.fire({
+        title: "Submitting verification",
+        text: "Please wait while we securely submit your certificate.",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+      });
+      await resubmitDonorVerification({
+        dateOfBirth: values.verificationDateOfBirth,
+        birthCertificate: values.verificationCertificate[0],
+        documentConsent: values.verificationConsent,
+      });
+      Swal.close();
+      await Swal.fire({
+        title: "Verification resubmitted",
+        text: "Your certificate is pending private administrator review.",
+        icon: "success",
+        confirmButtonColor: "#e11d48",
+      });
+    } catch (error) {
+      Swal.close();
+      await Swal.fire({
+        title: "Unable to submit verification",
+        text: error.message,
+        icon: "error",
+        confirmButtonColor: "#e11d48",
+      });
+    } finally {
+      setSubmittingVerification(false);
+    }
+  };
+
   return (
     <section className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
@@ -143,6 +194,88 @@ export default function DashboardProfile() {
           </button>
         )}
       </div>
+
+      {isDonor && donorVerificationStatus !== "verified" && (
+        <aside className={`mt-7 rounded-2xl border p-5 ${
+          donorVerificationStatus === "rejected"
+            ? "border-amber-200 bg-amber-50"
+            : "border-sky-200 bg-sky-50"
+        }`} aria-live="polite">
+          <h2 className="font-bold text-slate-900">
+            {donorVerificationStatus === "rejected" ? "Verification needs another submission" : "Donor verification pending"}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            {donorVerificationStatus === "rejected"
+              ? "Your last document was not approved. Submit a clear birth certificate photo and your date of birth again. Donor features remain unavailable until approval."
+              : "Your certificate is stored privately and is waiting for administrator review. You can use your profile while waiting; donor features become available after approval."}
+          </p>
+          {donorVerificationStatus === "rejected" && (
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="verification-date-of-birth">Date of birth (18+)</label>
+                <input
+                  id="verification-date-of-birth"
+                  type="date"
+                  className={inputClass}
+                  aria-invalid={Boolean(errors.verificationDateOfBirth)}
+                  {...register("verificationDateOfBirth", {
+                    required: "Date of birth is required.",
+                    validate: (value) => {
+                      const birthday = new Date(`${value}T00:00:00`);
+                      const cutoff = new Date();
+                      cutoff.setHours(0, 0, 0, 0);
+                      cutoff.setFullYear(cutoff.getFullYear() - 18);
+                      return (!Number.isNaN(birthday.getTime()) && birthday <= cutoff)
+                        || "You must be at least 18 years old.";
+                    },
+                  })}
+                />
+                <FieldError error={errors.verificationDateOfBirth} />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="verification-certificate">Birth certificate (PNG/JPEG/WebP, up to 5 MB)</label>
+                <input
+                  id="verification-certificate"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="w-full rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-rose-50 file:px-3 file:py-2 file:font-semibold file:text-rose-700"
+                  aria-invalid={Boolean(errors.verificationCertificate)}
+                  {...register("verificationCertificate", {
+                    required: "A certificate image is required.",
+                    validate: (files) => {
+                      const file = files?.[0];
+                      if (!file) return "A certificate image is required.";
+                      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+                        return "Choose a PNG, JPEG, or WebP image.";
+                      }
+                      return file.size <= 5 * 1024 * 1024 || "Image must be no larger than 5 MB.";
+                    },
+                  })}
+                />
+                <FieldError error={errors.verificationCertificate} />
+              </div>
+              <label className="flex items-start gap-3 text-sm leading-6 text-slate-700 sm:col-span-2">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                  aria-invalid={Boolean(errors.verificationConsent)}
+                  {...register("verificationConsent", { required: "Consent is required." })}
+                />
+                <span>I consent to private storage of this certificate for administrator review and understand it is removed from my active account record after the decision. Database backup retention may apply.</span>
+              </label>
+              <FieldError error={errors.verificationConsent} />
+              <button
+                type="button"
+                onClick={() => void submitVerification()}
+                disabled={submittingVerification}
+                className="rounded-xl bg-rose-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2"
+              >
+                Submit certificate for review
+              </button>
+            </div>
+          )}
+        </aside>
+      )}
 
       <form className="mt-8" onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className="mb-7 flex flex-col gap-5 rounded-2xl bg-slate-50 p-5 sm:flex-row sm:items-center">

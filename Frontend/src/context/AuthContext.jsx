@@ -3,10 +3,14 @@ import {
   getCurrentUser,
   getAdminUsers as getAdminUsersRequest,
   getAdminDashboardStats as getAdminDashboardStatsRequest,
+  getAdminDonorCertificate as getAdminDonorCertificateRequest,
+  getAdminDonorVerifications as getAdminDonorVerificationsRequest,
   getFundingSummary as getFundingSummaryRequest,
   login as loginRequest,
   loginWithGoogle as loginWithGoogleRequest,
   register as registerRequest,
+  resubmitDonorVerification as resubmitDonorVerificationRequest,
+  reviewAdminDonorVerification as reviewAdminDonorVerificationRequest,
   updateAdminUserRole as updateAdminUserRoleRequest,
   updateAdminUserStatus as updateAdminUserStatusRequest,
   updateCurrentUser as updateCurrentUserRequest,
@@ -118,8 +122,8 @@ export function AuthProvider({ children }) {
     (credentials) => authenticate(loginRequest(credentials)),
     [authenticate],
   );
-  const loginWithGoogle = useCallback(async (idToken, profile) => {
-    const result = await loginWithGoogleRequest(idToken, profile);
+  const loginWithGoogle = useCallback(async (idToken, profile, birthCertificate) => {
+    const result = await loginWithGoogleRequest(idToken, profile, birthCertificate);
     if (result.requiresProfile) return result;
 
     window.sessionStorage.setItem(TOKEN_KEY, result.token);
@@ -140,12 +144,42 @@ export function AuthProvider({ children }) {
     setUser(updatedUser);
     return updatedUser;
   }, []);
+  const resubmitDonorVerification = useCallback(async (details) => {
+    const token = getStoredToken();
+    if (!token) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+    const updatedUser = await resubmitDonorVerificationRequest(token, details);
+    setUser(updatedUser);
+    return updatedUser;
+  }, []);
   const getAdminUsers = useCallback(async (options) => {
     const token = getStoredToken();
     if (!token) {
       throw new Error("Your session has expired. Please sign in again.");
     }
     return getAdminUsersRequest(token, options);
+  }, []);
+  const getAdminDonorVerifications = useCallback(async () => {
+    const token = getStoredToken();
+    if (!token) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+    return getAdminDonorVerificationsRequest(token);
+  }, []);
+  const getAdminDonorCertificate = useCallback(async (userId) => {
+    const token = getStoredToken();
+    if (!token) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+    return getAdminDonorCertificateRequest(token, userId);
+  }, []);
+  const reviewAdminDonorVerification = useCallback(async (userId, status) => {
+    const token = getStoredToken();
+    if (!token) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+    return reviewAdminDonorVerificationRequest(token, userId, status);
   }, []);
   const getContactMessages = useCallback(async (options) => {
     const token = getStoredToken();
@@ -322,7 +356,11 @@ export function AuthProvider({ children }) {
       loginWithGoogle,
       register,
       updateProfile,
+      resubmitDonorVerification,
       getAdminUsers,
+      getAdminDonorVerifications,
+      getAdminDonorCertificate,
+      reviewAdminDonorVerification,
       getContactMessages,
       markContactMessageRead,
       getNotifications,
@@ -357,7 +395,11 @@ export function AuthProvider({ children }) {
       loginWithGoogle,
       register,
       updateProfile,
+      resubmitDonorVerification,
       getAdminUsers,
+      getAdminDonorVerifications,
+      getAdminDonorCertificate,
+      reviewAdminDonorVerification,
       getContactMessages,
       markContactMessageRead,
       getNotifications,

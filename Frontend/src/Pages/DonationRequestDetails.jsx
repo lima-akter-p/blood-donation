@@ -72,7 +72,10 @@ export default function DonationRequestDetails() {
   const userRole = String(user?.role ?? "").trim().toLowerCase();
   const isRequester = Boolean(userId && request?.requesterId === userId);
   const isAcceptedDonor = Boolean(userId && request?.donorId === userId);
-  const canConfirmDonation = request?.status === "pending" && userRole === "donor" && !isRequester;
+  const canConfirmDonation = request?.status === "pending"
+    && userRole === "donor"
+    && (user?.donorVerificationStatus || "verified") === "verified"
+    && !isRequester;
 
   const onConfirmDonation = async () => {
     const confirmation = await Swal.fire({

@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 import DonationRequest from '../models/donationRequest.model.js';
 import Notification from '../models/notification.model.js';
 import User from '../models/user.model.js';
-import { authorizeRoles } from '../middleware/auth.middleware.js';
+import { authorizeRoles, requireVerifiedDonor } from '../middleware/auth.middleware.js';
 import { uploadAvatar } from '../controllers/auth.controller.js';
 import { createAuthToken, verifyAuthToken } from '../utils/auth.js';
 import { getGoogleProfilePictureUrl } from '../utils/firebaseAuth.js';
@@ -40,6 +40,15 @@ async function postJson(path, body) {
   });
 }
 
+async function postMultipart(path, fields, fileField, fileName, fileBytes, mimeType) {
+  const body = new FormData();
+  Object.entries(fields).forEach(([key, value]) => body.append(key, String(value)));
+  if (fileField) {
+    body.append(fileField, new Blob([fileBytes], { type: mimeType }), fileName);
+  }
+  return fetch(`${baseUrl}${path}`, { method: 'POST', body });
+}
+
 async function patchJson(path, body, token) {
   return fetch(`${baseUrl}${path}`, {
     method: 'PATCH',
@@ -70,6 +79,145 @@ async function deleteWithToken(path, token) {
 }
 
 describe('admin user management API', () => {
+  it('keeps verification documents admin-only, uncached, and deletes them after approval', async () => {
+    const originalFindById = User.findById;
+    const originalFind = User.find;
+    const originalFindOne = User.findOne;
+    const originalFindOneAndUpdate = User.findOneAndUpdate;
+    const admin = new User({
+      _id: new mongoose.Types.ObjectId(),
+      name: 'Site Admin',
+      email: 'admin@example.com',
+      bloodGroup: 'A+',
+      district: 'Dhaka',
+      upazila: 'Savar',
+      role: 'admin',
+      status: 'active',
+    });
+    const application = {
+      _id: new mongoose.Types.ObjectId(),
+      name: 'Applicant Donor',
+      email: 'applicant@example.com',
+      avatar: '',
+      bloodGroup: 'O+',
+      district: 'Dhaka',
+      upazila: 'Savar',
+      role: 'donor',
+      status: 'active',
+      donorVerificationStatus: 'pending',
+      dateOfBirth: '1990-05-10',
+      birthCertificate: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      birthCertificateMimeType: 'image/png',
+      createdAt: new Date(),
+      async save() { return this; },
+    };
+    const observed = {};
+    User.findById = () => ({ select: async () => admin });
+    User.find = (filter) => {
+      observed.queueFilter = filter;
+      return {
+        select(fields) { observed.queueFields = fields; return this; },
+        sort() { return this; },
+        limit() { return this; },
+        then(resolve, reject) { return Promise.resolve([application]).then(resolve, reject); },
+      };
+    };
+    User.findOne = (filter) => {
+      observed.privateFilter = filter;
+      return { select: async (fields) => { observed.privateFields = fields; return application; } };
+    };
+    User.findOneAndUpdate = async (filter, update, options) => {
+      observed.reviewFilter = filter;
+      observed.reviewUpdate = update;
+      observed.reviewOptions = options;
+      if (filter.donorVerificationStatus !== application.donorVerificationStatus) return null;
+      application.donorVerificationStatus = update.$set.donorVerificationStatus;
+      Object.keys(update.$unset).forEach((field) => { application[field] = undefined; });
+      return application;
+    };
+
+    try {
+      const token = createAuthToken(admin._id);
+      const headers = { authorization: `Bearer ${token}` };
+      const queueResponse = await fetch(`${baseUrl}/admin/donor-verifications`, { headers });
+      const queueBody = await queueResponse.json();
+      assert.equal(queueResponse.status, 200);
+      assert.deepEqual(observed.queueFilter, {
+        role: 'donor',
+        donorVerificationStatus: 'pending',
+      });
+      assert.equal(observed.queueFields.includes('birthCertificate'), false);
+      assert.equal(observed.queueFields.includes('dateOfBirth'), false);
+      assert.equal(Object.hasOwn(queueBody.applications[0], 'birthCertificate'), false);
+      assert.equal(Object.hasOwn(queueBody.applications[0], 'dateOfBirth'), false);
+
+      const documentResponse = await fetch(
+        `${baseUrl}/admin/donor-verifications/${application._id}/document`,
+        { headers },
+      );
+      assert.equal(documentResponse.status, 200);
+      assert.match(documentResponse.headers.get('cache-control'), /no-store/i);
+      assert.equal(documentResponse.headers.get('content-type'), 'image/png');
+      assert.deepEqual(
+        Buffer.from(await documentResponse.arrayBuffer()),
+        application.birthCertificate,
+      );
+      assert.equal(observed.privateFilter.donorVerificationStatus, 'pending');
+      assert.match(observed.privateFields, /\+birthCertificate/);
+
+      const approvalResponse = await patchJson(
+        `/admin/donor-verifications/${application._id}`,
+        { status: 'verified' },
+        token,
+      );
+      const approvalBody = await approvalResponse.json();
+      assert.equal(approvalResponse.status, 200);
+      assert.equal(approvalBody.donorVerificationStatus, 'verified');
+      assert.deepEqual(observed.reviewFilter, {
+        _id: application._id,
+        role: 'donor',
+        donorVerificationStatus: 'pending',
+      });
+      assert.deepEqual(observed.reviewUpdate.$unset, {
+        birthCertificate: 1,
+        birthCertificateMimeType: 1,
+        dateOfBirth: 1,
+      });
+      assert.equal(observed.reviewOptions.runValidators, true);
+      assert.equal(application.birthCertificate, undefined);
+      assert.equal(application.birthCertificateMimeType, undefined);
+      assert.equal(application.dateOfBirth, undefined);
+      assert.equal(Object.hasOwn(approvalBody.user, 'birthCertificate'), false);
+
+      const duplicateReview = await patchJson(
+        `/admin/donor-verifications/${application._id}`,
+        { status: 'rejected' },
+        token,
+      );
+      assert.equal(duplicateReview.status, 409);
+
+      const originalRole = admin.role;
+      admin.role = 'volunteer';
+      let privateLookupCalled = false;
+      User.findOne = () => {
+        privateLookupCalled = true;
+        throw new Error('Non-admins must not load private certificates.');
+      };
+      const deniedResponse = await fetch(
+        `${baseUrl}/admin/donor-verifications/${application._id}/document`,
+        { headers },
+      );
+      assert.equal(deniedResponse.status, 403);
+      assert.equal(privateLookupCalled, false);
+      admin.role = originalRole;
+    } finally {
+      User.findById = originalFindById;
+      User.find = originalFind;
+      User.findOne = originalFindOne;
+      User.findOneAndUpdate = originalFindOneAndUpdate;
+    }
+  });
+
   it('lists filtered users without password fields and with pagination', async () => {
     const originalFindById = User.findById;
     const originalFind = User.find;
@@ -329,10 +477,20 @@ describe('public donor search API', () => {
         district: 'Dhaka',
         upazila: 'Savar',
         isAvailable: { $ne: false },
-        $or: [
-          { nextAvailableDate: '' },
-          { nextAvailableDate: { $lte: new Date().toISOString().slice(0, 10) } },
-          { nextAvailableDate: { $exists: false } },
+        $and: [
+          {
+            $or: [
+              { donorVerificationStatus: 'verified' },
+              { donorVerificationStatus: { $exists: false } },
+            ],
+          },
+          {
+            $or: [
+              { nextAvailableDate: '' },
+              { nextAvailableDate: { $lte: new Date().toISOString().slice(0, 10) } },
+              { nextAvailableDate: { $exists: false } },
+            ],
+          },
         ],
       });
       assert.equal(observed.select, 'name avatar bloodGroup district upazila phone isAvailable nextAvailableDate');
@@ -1553,6 +1711,86 @@ describe('donation request API', () => {
 });
 
 describe('authentication API validation', () => {
+  it('requires a valid certificate, explicit consent, and an eligible date of birth before touching the database', async () => {
+    const originalExists = User.exists;
+    User.exists = async () => {
+      throw new Error('Registration must validate the application before database access.');
+    };
+    const underageBirthDate = new Date();
+    underageBirthDate.setFullYear(underageBirthDate.getFullYear() - 17);
+    const underageDateOfBirth = [
+      underageBirthDate.getFullYear(),
+      String(underageBirthDate.getMonth() + 1).padStart(2, '0'),
+      String(underageBirthDate.getDate()).padStart(2, '0'),
+    ].join('-');
+    const fields = {
+      name: 'Test Donor',
+      email: 'donor@example.com',
+      password: 'Secure-password-123',
+      confirmPassword: 'Secure-password-123',
+      bloodGroup: 'O+',
+      district: 'Dhaka',
+      upazila: 'Dhanmondi',
+      dateOfBirth: underageDateOfBirth,
+      documentConsent: true,
+    };
+
+    try {
+      const missingDocument = await postMultipart(
+        '/auth/register',
+        { ...fields, dateOfBirth: '1990-01-01' },
+      );
+      assert.equal(missingDocument.status, 400);
+      assert.match((await missingDocument.json()).message, /birth certificate/i);
+
+      const underage = await postMultipart(
+        '/auth/register',
+        fields,
+        'birthCertificate',
+        'certificate.png',
+        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]),
+        'image/png',
+      );
+      assert.equal(underage.status, 400);
+      assert.match((await underage.json()).message, /18 or older/i);
+
+      const noConsent = await postMultipart(
+        '/auth/register',
+        { ...fields, dateOfBirth: '1990-01-01', documentConsent: false },
+        'birthCertificate',
+        'certificate.png',
+        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]),
+        'image/png',
+      );
+      assert.equal(noConsent.status, 400);
+      assert.match((await noConsent.json()).message, /consent/i);
+
+      const invalidImage = await postMultipart(
+        '/auth/register',
+        { ...fields, dateOfBirth: '1990-01-01' },
+        'birthCertificate',
+        'certificate.png',
+        Buffer.from('not an image'),
+        'image/png',
+      );
+      assert.equal(invalidImage.status, 400);
+      assert.match((await invalidImage.json()).message, /valid birth certificate image/i);
+
+      const oversizedImage = await postMultipart(
+        '/auth/register',
+        { ...fields, dateOfBirth: '1990-01-01' },
+        'birthCertificate',
+        'large-certificate.png',
+        Buffer.alloc(5 * 1024 * 1024 + 1),
+        'image/png',
+      );
+      assert.equal(oversizedImage.status, 413);
+      assert.match((await oversizedImage.json()).message, /no larger than 5 MB/i);
+    } finally {
+      User.exists = originalExists;
+    }
+  });
+
   it('accepts only HTTPS Google-hosted profile picture URLs', () => {
     assert.equal(
       getGoogleProfilePictureUrl('https://lh3.googleusercontent.com/a/test-photo'),
@@ -1670,7 +1908,7 @@ describe('authentication API validation', () => {
     };
 
     try {
-      const response = await postJson('/auth/register', {
+      const response = await postMultipart('/auth/register', {
         name: 'Test Donor',
         email: ' DONOR@example.com ',
         password: 'Secure-password-123',
@@ -1680,13 +1918,21 @@ describe('authentication API validation', () => {
         upazila: 'Dhanmondi',
         role: 'admin',
         status: 'blocked',
-      });
+        dateOfBirth: '1990-05-10',
+        documentConsent: true,
+      }, 'birthCertificate', 'certificate.png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]), 'image/png');
       const body = await response.json();
 
       assert.equal(response.status, 201);
       assert.equal(body.user.email, 'donor@example.com');
       assert.equal(body.user.role, 'donor');
       assert.equal(body.user.status, 'active');
+      assert.equal(body.user.donorVerificationStatus, 'pending');
+      assert.equal(createdData.dateOfBirth, '1990-05-10');
+      assert.equal(createdData.donorVerificationStatus, 'pending');
+      assert.equal(createdData.birthCertificateMimeType, 'image/png');
+      assert.equal(Buffer.isBuffer(createdData.birthCertificate), true);
+      assert.equal(Object.hasOwn(body.user, 'birthCertificate'), false);
       assert.equal(Object.hasOwn(body.user, 'password'), false);
       assert.notEqual(createdData.password, 'Secure-password-123');
       assert.equal(await bcrypt.compare('Secure-password-123', createdData.password), true);
@@ -1989,6 +2235,39 @@ describe('authentication API validation', () => {
 
     assert.equal(responseStatus, 403);
     assert.match(responseBody.message, /permission/i);
+  });
+
+  it('blocks pending and rejected donors from donor-only actions while allowing verified and legacy donors', () => {
+    const createResponse = () => ({
+      statusCode: 200,
+      body: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.body = body; return this; },
+    });
+
+    for (const verificationStatus of ['pending', 'rejected']) {
+      const response = createResponse();
+      let proceeded = false;
+      requireVerifiedDonor(
+        { user: { role: 'donor', donorVerificationStatus: verificationStatus } },
+        response,
+        () => { proceeded = true; },
+      );
+      assert.equal(response.statusCode, 403);
+      assert.equal(response.body.code, 'DONOR_VERIFICATION_REQUIRED');
+      assert.equal(proceeded, false);
+    }
+
+    for (const donor of [
+      { role: 'donor', donorVerificationStatus: 'verified' },
+      { role: 'donor' },
+      { role: 'admin', donorVerificationStatus: 'pending' },
+    ]) {
+      const response = createResponse();
+      let proceeded = false;
+      requireVerifiedDonor({ user: donor }, response, () => { proceeded = true; });
+      assert.equal(proceeded, true);
+    }
   });
 
   it('matches authorized roles without case or surrounding whitespace differences', () => {

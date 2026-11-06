@@ -4,7 +4,7 @@ LifeDrop is a blood donation management application that connects donors with pe
 
 ## Project status
 
-Implemented features include user authentication and profiles, donor availability and self-reported next-available dates, donor request creation and management, request status timelines with email notifications, public pending-request browsing, donation confirmation, public donor search, public contact submissions with an admin inbox, volunteer request management, admin user management, six-month request activity analytics, and BDT funding through SSLCOMMERZ. Production payment and deployment verification are still pending merchant credentials and deployment.
+Implemented features include user authentication and profiles, donor identity review, donor availability and self-reported next-available dates, donor request creation and management, request status timelines with email notifications, public pending-request browsing, donation confirmation, public donor search, public contact submissions with an admin inbox, volunteer request management, admin user management, six-month request activity analytics, and BDT funding through SSLCOMMERZ. Production payment and deployment verification are still pending merchant credentials and deployment.
 
 ## Live URL
 
@@ -20,11 +20,17 @@ Not deployed yet.
 
 The backend setup and required server environment variables are documented in the repository's backend configuration examples.
 
-Google sign-in verifies Firebase ID tokens on the backend before issuing a LifeDrop JWT. First-time Google users must select their blood group, district, and upazila/thana to create a donor profile. Keep the Firebase project ID aligned between frontend and backend; never put service-account credentials or other server secrets in frontend variables.
+Google sign-in verifies Firebase ID tokens on the backend before issuing a LifeDrop JWT. First-time Google users must select their blood group, district, upazila/thana, date of birth, and birth-certificate photo to create a donor profile. Keep the Firebase project ID aligned between frontend and backend; never put service-account credentials or other server secrets in frontend variables.
 
 ## Profile photos
 
 Profile photos are uploaded to ImgBB by the backend. Set `IMGBB_API_KEY` in `Backend/.env` to enable uploads; the example file is `Backend/.env.example`. Restart the backend after configuring it, and never put the ImgBB key in frontend environment variables. Photo upload is optional: if the service is not configured or an upload fails during registration, the user can choose to create the account without a photo and add one later from the profile page.
+
+## Donor identity review
+
+New donor registrations (including first-time Google registrations) require a date of birth confirming the applicant is at least 18 and a PNG, JPEG, or WebP birth-certificate photo no larger than 5 MB. The backend validates the image signature and stores the document privately in the MongoDB user record; it is never sent to ImgBB or exposed by profile, donor-search, or user-list APIs. Applicants can sign in and use their profile while review is pending, but cannot create or respond to donation requests, appear in donor search, or start a funding checkout until verified.
+
+Administrators review pending applications at `/dashboard/donor-verifications`. They must visually compare the certificate with the account and confirm the age requirement; the application does not automatically authenticate a certificate's authenticity. The authenticated admin-only document endpoint sends `no-store` responses. After either approval or rejection, the stored certificate and date of birth are removed from the active account record. Database backups may retain deleted records until their configured retention period expires. A rejected applicant can submit a new date of birth and certificate from their profile. Existing accounts without a verification state remain available as legacy verified accounts.
 
 ## Donor search
 

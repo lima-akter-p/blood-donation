@@ -56,8 +56,8 @@ app.use((error, req, res, next) => {
     const isTooLarge = error.code === 'LIMIT_FILE_SIZE';
     res.status(isTooLarge ? 413 : 400).json({
       message: isTooLarge
-        ? 'Avatar images must be no larger than 5 MB.'
-        : 'Upload one PNG, JPEG, or WebP avatar image.',
+        ? 'Uploaded images must be no larger than 5 MB.'
+        : 'Upload one PNG, JPEG, or WebP image using the expected file field.',
     });
     return;
   }

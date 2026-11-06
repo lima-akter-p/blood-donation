@@ -63,3 +63,21 @@ export function authorizeRoles(...roles) {
     next();
   };
 }
+
+export function requireVerifiedDonor(req, res, next) {
+  const userRole = typeof req.user?.role === 'string'
+    ? req.user.role.trim().toLowerCase()
+    : '';
+  if (
+    userRole === 'donor'
+    && req.user.donorVerificationStatus
+    && req.user.donorVerificationStatus !== 'verified'
+  ) {
+    res.status(403).json({
+      message: 'Your donor account is awaiting administrator verification.',
+      code: 'DONOR_VERIFICATION_REQUIRED',
+    });
+    return;
+  }
+  next();
+}

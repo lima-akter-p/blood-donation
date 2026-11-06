@@ -58,6 +58,26 @@ const userSchema = new mongoose.Schema(
       default: '',
       match: /^(?:\d{4}-\d{2}-\d{2})?$/,
     },
+    dateOfBirth: {
+      type: String,
+      select: false,
+      match: /^\d{4}-\d{2}-\d{2}$/,
+    },
+    donorVerificationStatus: {
+      type: String,
+      enum: ['pending', 'verified', 'rejected'],
+      default: 'verified',
+      index: true,
+    },
+    birthCertificate: {
+      type: Buffer,
+      select: false,
+    },
+    birthCertificateMimeType: {
+      type: String,
+      enum: ['image/png', 'image/jpeg', 'image/webp'],
+      select: false,
+    },
     password: {
       type: String,
       select: false,

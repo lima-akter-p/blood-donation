@@ -40,10 +40,20 @@ export async function searchDonors(req, res) {
     district,
     upazila,
     isAvailable: { $ne: false },
-    $or: [
-      { nextAvailableDate: '' },
-      { nextAvailableDate: { $lte: new Date().toISOString().slice(0, 10) } },
-      { nextAvailableDate: { $exists: false } },
+    $and: [
+      {
+        $or: [
+          { donorVerificationStatus: 'verified' },
+          { donorVerificationStatus: { $exists: false } },
+        ],
+      },
+      {
+        $or: [
+          { nextAvailableDate: '' },
+          { nextAvailableDate: { $lte: new Date().toISOString().slice(0, 10) } },
+          { nextAvailableDate: { $exists: false } },
+        ],
+      },
     ],
   };
   const [donors, total] = await Promise.all([

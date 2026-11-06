@@ -11,11 +11,19 @@ import {
   updateDonationRequest,
   updateDonationRequestStatus,
 } from '../controllers/donationRequest.controller.js';
-import { authenticateToken, authorizeRoles } from '../middleware/auth.middleware.js';
+import {
+  authenticateToken,
+  authorizeRoles,
+  requireVerifiedDonor,
+} from '../middleware/auth.middleware.js';
 
 const router = express.Router();
-const donorOrAdmin = [authenticateToken, authorizeRoles('donor', 'admin')];
-const requestOwnerOrAdmin = [authenticateToken, authorizeRoles('donor', 'volunteer', 'admin')];
+const donorOrAdmin = [authenticateToken, requireVerifiedDonor, authorizeRoles('donor', 'admin')];
+const requestOwnerOrAdmin = [
+  authenticateToken,
+  requireVerifiedDonor,
+  authorizeRoles('donor', 'volunteer', 'admin'),
+];
 
 router.get('/', getPendingDonationRequests);
 router.post('/', ...donorOrAdmin, createDonationRequest);
@@ -26,9 +34,15 @@ router.patch('/all/:id', authenticateToken, authorizeRoles('admin'), updateDonat
 router.delete('/all/:id', authenticateToken, authorizeRoles('admin'), deleteDonationRequest);
 router.get('/mine/:id', ...requestOwnerOrAdmin, getDonationRequest);
 router.get('/:id', authenticateToken, getPendingDonationRequestDetails);
-router.post('/:id/donate', authenticateToken, authorizeRoles('donor'), confirmDonation);
+router.post('/:id/donate', authenticateToken, requireVerifiedDonor, authorizeRoles('donor'), confirmDonation);
 router.patch('/:id', ...requestOwnerOrAdmin, updateDonationRequest);
-router.patch('/:id/status', authenticateToken, authorizeRoles('donor', 'volunteer', 'admin'), updateDonationRequestStatus);
+router.patch(
+  '/:id/status',
+  authenticateToken,
+  requireVerifiedDonor,
+  authorizeRoles('donor', 'volunteer', 'admin'),
+  updateDonationRequestStatus,
+);
 router.delete('/:id', ...requestOwnerOrAdmin, deleteDonationRequest);
 
 export default router;

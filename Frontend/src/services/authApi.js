@@ -43,9 +43,15 @@ export async function uploadAvatar(file) {
 }
 
 export async function register(details) {
+  const { birthCertificate, ...fields } = details;
+  const body = new FormData();
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) body.append(key, String(value));
+  });
+  if (birthCertificate) body.append("birthCertificate", birthCertificate);
   const data = await request("/auth/register", {
     method: "POST",
-    body: JSON.stringify(details),
+    body,
   });
   return data;
 }
@@ -57,11 +63,31 @@ export async function login(credentials) {
   });
 }
 
-export async function loginWithGoogle(idToken, profile) {
+export async function loginWithGoogle(idToken, profile, birthCertificate) {
+  if (profile) {
+    const body = new FormData();
+    body.append("idToken", idToken);
+    body.append("profile", JSON.stringify(profile));
+    if (birthCertificate) body.append("birthCertificate", birthCertificate);
+    return request("/auth/google", { method: "POST", body });
+  }
   return request("/auth/google", {
     method: "POST",
-    body: JSON.stringify({ idToken, ...(profile ? { profile } : {}) }),
+    body: JSON.stringify({ idToken }),
   });
+}
+
+export async function resubmitDonorVerification(token, { dateOfBirth, documentConsent, birthCertificate }) {
+  const body = new FormData();
+  body.append("dateOfBirth", dateOfBirth);
+  body.append("documentConsent", String(documentConsent));
+  body.append("birthCertificate", birthCertificate);
+  const data = await request("/auth/donor-verification", {
+    token,
+    method: "POST",
+    body,
+  });
+  return data.user;
 }
 
 export async function getCurrentUser(token) {
@@ -104,6 +130,35 @@ export async function updateAdminUserRole(token, userId, role) {
 
 export async function getAdminDashboardStats(token) {
   return request("/admin/dashboard", { token });
+}
+
+export async function getAdminDonorVerifications(token) {
+  return request("/admin/donor-verifications", { token });
+}
+
+export async function getAdminDonorCertificate(token, userId) {
+  let response;
+  try {
+    response = await fetch(
+      `${API_BASE_URL}/admin/donor-verifications/${encodeURIComponent(userId)}/document`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch {
+    throw new Error("Unable to reach the LifeDrop server. Check your connection and try again.");
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || "The verification document could not be loaded.");
+  }
+  return response.blob();
+}
+
+export async function reviewAdminDonorVerification(token, userId, status) {
+  return request(`/admin/donor-verifications/${encodeURIComponent(userId)}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
 }
 
 export async function getFundingSummary(token) {

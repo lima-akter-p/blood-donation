@@ -509,7 +509,13 @@ export async function getAdminDashboardStats(req, res) {
   monthStart.setUTCHours(0, 0, 0, 0);
   monthStart.setUTCMonth(monthStart.getUTCMonth() - 5);
   const [donorCount, donationRequestCount, pendingCount, inProgressCount, doneCount, canceledCount, fundingSummary, monthlyRows] = await Promise.all([
-    User.countDocuments({ role: 'donor' }),
+    User.countDocuments({
+      role: 'donor',
+      $or: [
+        { donorVerificationStatus: 'verified' },
+        { donorVerificationStatus: { $exists: false } },
+      ],
+    }),
     DonationRequest.countDocuments({}),
     DonationRequest.countDocuments({ status: 'pending' }),
     DonationRequest.countDocuments({ status: 'inprogress' }),

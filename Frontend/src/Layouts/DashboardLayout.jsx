@@ -12,6 +12,7 @@ import {
   Mail,
   Menu,
   Plus,
+  ShieldCheck,
   Users,
   UserRound,
   X,
@@ -61,11 +62,14 @@ function SidebarContent({ user, onNavigate, onLogout }) {
   const role = user.role?.trim().toLowerCase();
   const navigation = [
     ...baseNavigation,
-    ...(role === "donor" && user.status === "active" ? requestNavigation : []),
+    ...(role === "donor" && user.status === "active" && (user.donorVerificationStatus || "verified") === "verified"
+      ? requestNavigation
+      : []),
     ...(role === "admin" && user.status === "active" ? [
       { label: "Create request", path: "/dashboard/create-donation-request", icon: Plus },
       { label: "All donation requests", path: "/dashboard/all-blood-donation-request", icon: ClipboardList },
       { label: "All users", path: "/dashboard/all-users", icon: UserRound },
+      { label: "Donor verification", path: "/dashboard/donor-verifications", icon: ShieldCheck },
       { label: "Contact messages", path: "/dashboard/contact-messages", icon: Mail },
     ] : []),
     ...(role === "volunteer" && user.status === "active" ? [{
@@ -225,6 +229,23 @@ function DashboardHome({ user }) {
           )}
         </div>
       </div>
+
+      {user.role?.trim().toLowerCase() === "donor"
+        && (user.donorVerificationStatus || "verified") !== "verified" && (
+        <aside className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-5" aria-live="polite">
+          <p className="text-sm font-bold text-sky-950">
+            {user.donorVerificationStatus === "rejected" ? "Donor verification needs resubmission" : "Donor verification is pending"}
+          </p>
+          <p className="mt-1 text-sm leading-6 text-sky-900">
+            {user.donorVerificationStatus === "rejected"
+              ? "Please open your profile to submit a new certificate. Donor features are unavailable until approval."
+              : "Your certificate is waiting for private administrator review. Donor features will be enabled after approval."}
+          </p>
+          <Link to="/dashboard/profile" className="mt-3 inline-flex text-sm font-bold text-sky-950 underline underline-offset-2">
+            {user.donorVerificationStatus === "rejected" ? "Resubmit verification" : "View verification status"}
+          </Link>
+        </aside>
+      )}
 
       {user.role?.trim().toLowerCase() === "donor"
         && nextAvailableDate
