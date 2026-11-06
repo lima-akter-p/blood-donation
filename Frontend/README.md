@@ -54,7 +54,7 @@ The admin dashboard includes a six-month chart comparing requests created with d
 
 Authenticated users can contribute between BDT 10.00 and BDT 500,000.00 using the hosted SSLCOMMERZ checkout. Funding history and dashboard totals include only transactions verified against SSLCOMMERZ's server-side validation API; card and mobile payment details are never handled by LifeDrop.
 
-To enable checkout, configure `SSLCOMMERZ_STORE_ID`, `SSLCOMMERZ_STORE_PASSWORD`, `SSLCOMMERZ_IS_LIVE`, and `API_PUBLIC_URL` in the backend environment. Set `CLIENT_URL` to the frontend origin. Register the `/funding/ipn` endpoint as the merchant IPN listener. Use `SSLCOMMERZ_IS_LIVE=false` and sandbox credentials for testing; live mode requires valid merchant credentials and public HTTPS URLs. See [Backend/.env.example](../Backend/.env.example) for the variable names. Do not expose gateway credentials to the frontend.
+To enable checkout, configure `SSLCOMMERZ_STORE_ID`, `SSLCOMMERZ_STORE_PASSWORD`, `SSLCOMMERZ_IS_LIVE`, and `CLIENT_URL` in the backend environment. `API_PUBLIC_URL` is an optional public backend URL override; on Render, the service's `RENDER_EXTERNAL_URL` is used when it is unset. Register the `/funding/ipn` endpoint as the merchant IPN listener. Use `SSLCOMMERZ_IS_LIVE=false` and sandbox credentials for testing; live mode requires valid merchant credentials and public HTTPS URLs. Funding history and dashboard totals include only completed payments verified with SSLCOMMERZ; pending or failed attempts are stored with their status but are not counted as funding. See [Backend/.env.example](../Backend/.env.example) for the variable names. Do not expose gateway credentials to the frontend.
 
 ## Contact
 

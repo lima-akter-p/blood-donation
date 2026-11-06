@@ -56,6 +56,7 @@ it('creates hosted BDT checkout using server amount and verifies payment before 
     storePassword: process.env.SSLCOMMERZ_STORE_PASSWORD,
     live: process.env.SSLCOMMERZ_IS_LIVE,
     apiUrl: process.env.API_PUBLIC_URL,
+    renderExternalUrl: process.env.RENDER_EXTERNAL_URL,
     clientUrl: process.env.CLIENT_URL,
   };
   const originalUserFindById = User.findById;
@@ -79,6 +80,8 @@ it('creates hosted BDT checkout using server amount and verifies payment before 
   let verifiedUpdate;
   let gatewayAmount = '250.50';
   setGatewayEnvironment();
+  delete process.env.API_PUBLIC_URL;
+  process.env.RENDER_EXTERNAL_URL = 'https://api.example.test';
   User.findById = () => ({ select: async () => user });
   Funding.create = async (details) => {
     funding = {
@@ -128,6 +131,10 @@ it('creates hosted BDT checkout using server amount and verifies payment before 
     assert.equal(funding.status, 'pending');
     assert.equal(submittedForm.get('total_amount'), '250.50');
     assert.equal(submittedForm.get('currency'), 'BDT');
+    assert.equal(submittedForm.get('success_url'), 'https://api.example.test/funding/success');
+    assert.equal(submittedForm.get('fail_url'), 'https://api.example.test/funding/failure');
+    assert.equal(submittedForm.get('cancel_url'), 'https://api.example.test/funding/cancel');
+    assert.equal(submittedForm.get('ipn_url'), 'https://api.example.test/funding/ipn');
     assert.equal(submittedForm.get('cus_phone'), '+8801712345678');
     assert.equal(submittedForm.get('store_passwd'), 'test-password-not-for-production');
     assert.equal(checkoutBody.storePassword, undefined);
@@ -170,6 +177,8 @@ it('creates hosted BDT checkout using server amount and verifies payment before 
     else process.env.SSLCOMMERZ_IS_LIVE = originalEnvironment.live;
     if (originalEnvironment.apiUrl === undefined) delete process.env.API_PUBLIC_URL;
     else process.env.API_PUBLIC_URL = originalEnvironment.apiUrl;
+    if (originalEnvironment.renderExternalUrl === undefined) delete process.env.RENDER_EXTERNAL_URL;
+    else process.env.RENDER_EXTERNAL_URL = originalEnvironment.renderExternalUrl;
     if (originalEnvironment.clientUrl === undefined) delete process.env.CLIENT_URL;
     else process.env.CLIENT_URL = originalEnvironment.clientUrl;
   }

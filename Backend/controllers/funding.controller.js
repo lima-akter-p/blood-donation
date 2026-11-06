@@ -10,14 +10,15 @@ const LIVE_URL = 'https://securepay.sslcommerz.com';
 
 function getGatewayConfiguration() {
   const { SSLCOMMERZ_STORE_ID, SSLCOMMERZ_STORE_PASSWORD, SSLCOMMERZ_IS_LIVE, API_PUBLIC_URL } = process.env;
-  if (!SSLCOMMERZ_STORE_ID || !SSLCOMMERZ_STORE_PASSWORD || !API_PUBLIC_URL) {
+  const configuredApiUrl = API_PUBLIC_URL?.trim() || process.env.RENDER_EXTERNAL_URL?.trim();
+  if (!SSLCOMMERZ_STORE_ID || !SSLCOMMERZ_STORE_PASSWORD || !configuredApiUrl) {
     return null;
   }
 
   let apiUrl;
   let clientUrl;
   try {
-    apiUrl = new URL(API_PUBLIC_URL);
+    apiUrl = new URL(configuredApiUrl);
     const configuredClientUrl = process.env.CLIENT_URL?.split(',')[0]?.trim();
     clientUrl = new URL(configuredClientUrl);
   } catch {
